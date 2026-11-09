@@ -3,6 +3,12 @@ import { AuthFormStepsType } from "@/types/auth/auth";
 import { ArrowRight } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { showToast } from "@/components/toast";
+import {
+  readPendingPasswordReset,
+  requestPasswordReset,
+  savePendingPasswordReset,
+} from "@/services/auth";
 interface AuthFormStepsProps {
   gotoAuthFormPage: (stepKey: AuthFormStepsType) => void;
 }
@@ -10,6 +16,7 @@ interface AuthFormStepsProps {
 export const VerifyAccount: React.FC<AuthFormStepsProps> = (props) => {
   const { gotoAuthFormPage } = props;
 
+  const [pendingReset] = useState(() => readPendingPasswordReset());
   const [timer, setTimer] = useState(30);
   const [showResendLink, setShowResendLink] = useState(false);
   const countDownSec = () => {
@@ -32,8 +39,16 @@ export const VerifyAccount: React.FC<AuthFormStepsProps> = (props) => {
     }, 2000); // 2-second delay
     return () => clearTimeout(speakTimer);
   }, []);
+  useEffect(() => {
+    if (!pendingReset) {
+      gotoAuthFormPage("resetPassword");
+    }
+  }, [pendingReset, gotoAuthFormPage]);
   const resendOTP = async () => {
     try {
+      if (pendingReset?.emailAddress) {
+        await requestPasswordReset(pendingReset.emailAddress);
+      }
       setShowResendLink(false);
       setTimer(30);
     } catch (error: unknown) {
@@ -79,6 +94,18 @@ export const VerifyAccount: React.FC<AuthFormStepsProps> = (props) => {
     gotoAuthFormPage("login");
   };
   const createPassword = async () => {
+    const code = otp.join("");
+
+    if (!pendingReset || code.length !== otp.length) {
+      showToast({
+        variant: "error",
+        title: "Invalid code",
+        message: "Please enter the full verification code.",
+      });
+      return;
+    }
+
+    savePendingPasswordReset({ ...pendingReset, otp: code });
     gotoAuthFormPage("createPassword");
   };
   return (
@@ -100,7 +127,7 @@ export const VerifyAccount: React.FC<AuthFormStepsProps> = (props) => {
         <p className="text-gray-500 text-[16px]">
           Enter the verification code sent to your email address{" "}
           <span className="font-medium-custom text-(--primary-color)">
-            sunaf4real@gmail.com
+            {pendingReset?.emailAddress || "your email address"}
           </span>
         </p>
       </div>

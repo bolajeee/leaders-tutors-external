@@ -29,3 +29,30 @@ export const SignupSchema = z
   });
 
 export type SignupSchemaType = z.infer<typeof SignupSchema>;
+
+export const ResetPasswordRequestSchema = z.object({
+  email: z
+    .string()
+    .min(1, { message: "Email is required" })
+    .email("Enter a valid email address"),
+});
+export type ResetPasswordRequestType = z.infer<
+  typeof ResetPasswordRequestSchema
+>;
+
+export const CreateNewPasswordSchema = z
+  .object({
+    password: z
+      .string()
+      .min(6, { message: "Password must be at least 6 characters long" }),
+    confirmPassword: z
+      .string()
+      .min(6, {
+        message: "Confirm Password must be at least 6 characters long",
+      }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+export type CreateNewPasswordType = z.infer<typeof CreateNewPasswordSchema>;

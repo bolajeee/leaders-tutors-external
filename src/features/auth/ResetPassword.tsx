@@ -1,19 +1,64 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Button, TextInput } from "@/components/form";
 import { AuthFormStepsType } from "@/types/auth/auth";
+import {
+  ResetPasswordRequestSchema,
+  ResetPasswordRequestType,
+} from "@/types/auth/schema";
 import { ArrowRight } from "lucide-react";
 import Image from "next/image";
+import { useForm } from "react-hook-form";
+import { useState } from "react";
+import { handleAppError } from "@/lib/axios";
+import { showToast } from "@/components/toast";
+import {
+  getPasswordResetUserId,
+  requestPasswordReset,
+  savePendingPasswordReset,
+} from "@/services/auth";
+
 interface AuthFormStepsProps {
   gotoAuthFormPage: (stepKey: AuthFormStepsType) => void;
 }
 
 export const ResetPassword: React.FC<AuthFormStepsProps> = (props) => {
   const { gotoAuthFormPage } = props;
+  const [isPending, setIsPending] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<ResetPasswordRequestType>({
+    defaultValues: { email: "" },
+    resolver: zodResolver(ResetPasswordRequestSchema),
+    mode: "onChange",
+  });
+
   const login = () => {
     gotoAuthFormPage("login");
   };
-  const verifyAccount = async () => {
-    gotoAuthFormPage("verifyAccount");
+
+  const handleRequestReset = async (data: ResetPasswordRequestType) => {
+    try {
+      setIsPending(true);
+
+      const response = await requestPasswordReset(data.email);
+      const pendingReset = getPasswordResetUserId(response, data.email);
+      savePendingPasswordReset(pendingReset);
+
+      showToast({
+        variant: "success",
+        title: "Verification code sent",
+        message: "Check your email for the code to reset your password.",
+      });
+      gotoAuthFormPage("verifyAccount");
+    } catch (error) {
+      handleAppError({ showToast: true, error });
+    } finally {
+      setIsPending(false);
+    }
   };
+
   return (
     <section className="flex flex-col gap-5 justify-center items-start animate-fade-up">
       <div className="flex flex-col gap-1">
@@ -35,14 +80,21 @@ export const ResetPassword: React.FC<AuthFormStepsProps> = (props) => {
         </p>
       </div>
 
-      <TextInput id="username" label="Email Address" />
+      <TextInput
+        id="email"
+        label="Email Address"
+        message={errors.email?.message}
+        disabled={isPending}
+        {...register("email")}
+      />
 
       {/* BUTTON */}
       <Button
-        onClick={verifyAccount}
+        onClick={handleSubmit(handleRequestReset)}
         text="Proceed"
         frontIcon={<ArrowRight />}
         fullWidth
+        isLoading={isPending}
       />
       <p className="text-sm text-[var(--text-color)]">
         Already have an account?{" "}
