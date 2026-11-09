@@ -1,26 +1,77 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { Button, PasswordInput } from "@/components/form";
 import useToggle from "@/hooks/useToggle";
 import { AuthFormStepsType } from "@/types/auth/auth";
+import {
+  CreateNewPasswordSchema,
+  CreateNewPasswordType,
+} from "@/types/auth/schema";
 import { ArrowRight } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { handleAppError } from "@/lib/axios";
+import {
+  clearPendingPasswordReset,
+  readPendingPasswordReset,
+  verifySignupOtp,
+} from "@/services/auth";
+
 interface AuthFormStepsProps {
   gotoAuthFormPage: (stepKey: AuthFormStepsType) => void;
 }
 
 export const CreatePassword: React.FC<AuthFormStepsProps> = (props) => {
   const { gotoAuthFormPage } = props;
+  const [pendingReset] = useState(() => readPendingPasswordReset());
   const passwordResetSuccessToggle = useToggle();
   const [isPending, setIsPending] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<CreateNewPasswordType>({
+    defaultValues: { password: "", confirmPassword: "" },
+    resolver: zodResolver(CreateNewPasswordSchema),
+    mode: "onChange",
+  });
+
+  useEffect(() => {
+    if (!pendingReset?.otp) {
+      gotoAuthFormPage("resetPassword");
+    }
+  }, [pendingReset, gotoAuthFormPage]);
+
   const login = () => {
+    clearPendingPasswordReset();
     gotoAuthFormPage("login");
   };
-  const createPassword = async () => {
-    setIsPending(true);
-    passwordResetSuccessToggle.open();
-    setIsPending(false);
+
+  const createPassword = async (data: CreateNewPasswordType) => {
+    if (!pendingReset?.userId || !pendingReset?.otp) {
+      gotoAuthFormPage("resetPassword");
+      return;
+    }
+
+    try {
+      setIsPending(true);
+
+      await verifySignupOtp({
+        userId: pendingReset.userId,
+        otp: Number(pendingReset.otp),
+        password: data.password,
+        confirmPassword: data.confirmPassword,
+      });
+
+      passwordResetSuccessToggle.open();
+    } catch (error) {
+      handleAppError({ showToast: true, error });
+    } finally {
+      setIsPending(false);
+    }
   };
+
   return (
     <>
       <section className="flex flex-col gap-5 justify-center items-start animate-fade-up">
@@ -42,16 +93,29 @@ export const CreatePassword: React.FC<AuthFormStepsProps> = (props) => {
             Enter a strong password to secure your account.
           </p>
         </div>
-        <PasswordInput id="password" label="Create Password" />
+        <PasswordInput
+          id="password"
+          label="Create Password"
+          message={errors.password?.message}
+          disabled={isPending}
+          {...register("password")}
+        />
 
         {/* Confirm Password */}
-        <PasswordInput id="confirmPassword" label="Confirm password" />
+        <PasswordInput
+          id="confirmPassword"
+          label="Confirm password"
+          message={errors.confirmPassword?.message}
+          disabled={isPending}
+          {...register("confirmPassword")}
+        />
         {/* BUTTON */}
         <Button
-          onClick={createPassword}
+          onClick={handleSubmit(createPassword)}
           text="Proceed"
           frontIcon={<ArrowRight />}
           fullWidth
+          isLoading={isPending}
         />
         <p className="text-sm text-(--text-color)">
           Already have an account?{" "}
@@ -70,7 +134,6 @@ export const CreatePassword: React.FC<AuthFormStepsProps> = (props) => {
         btnText="Login to my account"
         loadingText="Processing..."
         onClick={login}
-        isLoading={isPending}
         isOpen={passwordResetSuccessToggle.isOpen}
       />
     </>

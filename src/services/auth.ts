@@ -4,6 +4,8 @@ import { AuthResponse } from "@/types/auth/auth";
 export const PENDING_SIGNUP_EMAIL_STORAGE_KEY = "leaders-tutors-signup-email";
 export const PENDING_SIGNUP_VERIFICATION_STORAGE_KEY =
   "leaders-tutors-pending-signup";
+export const PENDING_RESET_PASSWORD_STORAGE_KEY =
+  "leaders-tutors-pending-reset-password";
 
 interface LoginPayload {
   emailAddress: string;
@@ -43,6 +45,12 @@ export interface PendingSignupVerification {
     email?: string;
     paystackPaymentKey?: string;
   };
+}
+
+export interface PendingPasswordReset {
+  userId: string;
+  emailAddress: string;
+  otp?: string;
 }
 
 type AuthApiResponse = Record<string, unknown>;
@@ -211,6 +219,37 @@ export const verifySignupOtp = async (payload: VerifySignupOtpPayload) =>
     payload,
   );
 
+export const requestPasswordReset = async (emailAddress: string) =>
+  apiClient.post<AuthApiResponse, { emailAddress: string }>(
+    "/user/auth/reset-password",
+    { emailAddress },
+  );
+
+export const getPasswordResetUserId = (
+  response: AuthApiResponse,
+  fallbackEmail: string,
+): PendingPasswordReset => {
+  const dataObj = response?.data as Record<string, unknown> | undefined;
+  const userObj = response?.user as Record<string, unknown> | undefined;
+
+  const userId =
+    getStringValue(response, ["userId", "id"]) ||
+    (dataObj
+      ? getStringValue(dataObj as AuthApiResponse, ["userId", "id"])
+      : "") ||
+    (userObj
+      ? getStringValue(userObj as AuthApiResponse, ["userId", "id"])
+      : "");
+
+  const emailAddress = getStringValue(
+    response,
+    ["emailAddress", "email"],
+    fallbackEmail,
+  );
+
+  return { userId, emailAddress };
+};
+
 export const getSignupVerificationData = (
   response: AuthApiResponse,
   signupPayload: SignupPayload,
@@ -300,6 +339,47 @@ export const clearPendingSignupVerification = () => {
 
   window.sessionStorage.removeItem(PENDING_SIGNUP_VERIFICATION_STORAGE_KEY);
   window.sessionStorage.removeItem(PENDING_SIGNUP_EMAIL_STORAGE_KEY);
+};
+
+export const savePendingPasswordReset = (
+  pendingReset: PendingPasswordReset,
+) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.setItem(
+    PENDING_RESET_PASSWORD_STORAGE_KEY,
+    JSON.stringify(pendingReset),
+  );
+};
+
+export const readPendingPasswordReset = (): PendingPasswordReset | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storedValue = window.sessionStorage.getItem(
+    PENDING_RESET_PASSWORD_STORAGE_KEY,
+  );
+
+  if (!storedValue) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(storedValue) as PendingPasswordReset;
+  } catch {
+    return null;
+  }
+};
+
+export const clearPendingPasswordReset = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.removeItem(PENDING_RESET_PASSWORD_STORAGE_KEY);
 };
 
 export const normalizeAuthResponse = (
